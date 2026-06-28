@@ -39,11 +39,26 @@ def add_professional_pullback_signals(
     true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     df["ATR"] = true_range.rolling(atr_period).mean()
 
+    # ==========================================================
+    # Professional Trend Filter v2
+    # ==========================================================
+
+    df["MA20_Rising"] = df["MA_Fast"] > df["MA_Fast"].shift(5)
+    df["MA50_Rising"] = df["MA_Slow"] > df["MA_Slow"].shift(5)
+    df["MA200_Rising"] = df["MA_Long"] > df["MA_Long"].shift(10)
+
     trend_ok = (
         (df["Close"] > df["MA_Fast"]) &
         (df["MA_Fast"] > df["MA_Slow"]) &
-        (df["MA_Slow"] > df["MA_Long"])
+        (df["MA_Slow"] > df["MA_Long"]) &
+        df["MA20_Rising"] &
+        df["MA50_Rising"] &
+        df["MA200_Rising"]
     )
+
+    # ==========================================================
+    # Pullback Logic
+    # ==========================================================
 
     pullback_days = pd.Series(0, index=df.index)
 
@@ -60,12 +75,20 @@ def add_professional_pullback_signals(
         (df["PullbackDays"].shift(1) <= pullback_max_days)
     )
 
+    # ==========================================================
+    # Volume Filter
+    # ==========================================================
+
     if volume_filter == "VolumeBelowMA20":
         volume_ok = df["Volume"].shift(1) < df["VolumeMA20"].shift(1)
     elif volume_filter == "VolumeAboveMA20":
         volume_ok = df["Volume"] > df["VolumeMA20"]
     else:
         volume_ok = True
+
+    # ==========================================================
+    # Entry Trigger
+    # ==========================================================
 
     if entry_trigger == "BreakPreviousHigh":
         entry_ok = df["Close"] > df["PrevHigh"]
@@ -81,6 +104,10 @@ def add_professional_pullback_signals(
         volume_ok &
         entry_ok
     )
+
+    # ==========================================================
+    # Optional Higher High Requirement
+    # ==========================================================
 
     if require_new_higher_high:
         highest_high = df["High"].cummax().shift(1)
@@ -103,6 +130,10 @@ def add_professional_pullback_signals(
     else:
         df["BuySignal"] = buy_signal
 
+    # ==========================================================
+    # Time Exit
+    # ==========================================================
+
     df["SellSignal"] = False
 
     for i in range(len(df)):
@@ -114,6 +145,10 @@ def add_professional_pullback_signals(
                     exit_index,
                     df.columns.get_loc("SellSignal")
                 ] = True
+
+    # ==========================================================
+    # Stop Logic
+    # ==========================================================
 
     if stop_type == "UnderEntryCandle":
         df["StopPrice"] = df["Low"]
@@ -129,8 +164,8 @@ def add_professional_pullback_signals(
 
 class ProfessionalPullbackStrategy(BaseStrategy):
     name = "Professional Pullback"
-    version = "1.0"
-    description = "Professionell swing-pullback inspirerad av Minervini/Qullamaggie: stark trend, nära 52W high, kontrollerad pullback och breakout-entry."
+    version = "2.0"
+    description = "Professionell swing-pullback: stark trend, stigande MA20/MA50/MA200, nära 52W high, kontrollerad pullback och breakout-entry."
     asset_classes = ["Stocks", "ETF"]
     tags = ["Swing", "Pullback", "Momentum", "Trend Following", "Long Only"]
 
@@ -174,35 +209,15 @@ class ProfessionalPullbackStrategy(BaseStrategy):
             "ma_fast": [20],
             "ma_slow": [50],
             "ma_long": [200],
-
             "pullback_min_days": [2],
             "pullback_max_days": [10],
-
             "near_high_pct": [10],
-
             "volume_filter": ["None"],
-
             "entry_trigger": ["BreakPreviousHigh"],
-
-            "stop_type": [
-                "UnderEntryCandle",
-                "ATR",
-            ],
-
-            "atr_multiple": [
-                0.5,
-                1.0,
-            ],
-
-            "exit_days": [
-                10,
-                20,
-            ],
-
-            "require_new_higher_high": [
-                False,
-                True,
-            ],
+            "stop_type": ["UnderEntryCandle", "ATR"],
+            "atr_multiple": [0.5, 1.0],
+            "exit_days": [10, 20],
+            "require_new_higher_high": [False, True],
         }
 
     def supports_intraday(self):
