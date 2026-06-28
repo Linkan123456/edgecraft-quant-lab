@@ -193,56 +193,6 @@ def light_from_score(score, green=70, yellow=50):
     return "🔴 Röd"
 
 
-def is_monte_carlo_green(monte_carlo_summary):
-    if not isinstance(monte_carlo_summary, dict):
-        return False
-
-    traffic_light = str(monte_carlo_summary.get("Traffic Light", "")).upper()
-
-    if "RÖD" in traffic_light or "RED" in traffic_light or "EJ ROBUST" in traffic_light:
-        return False
-
-    if "GRÖN" in traffic_light or "GREEN" in traffic_light:
-        return True
-
-    try:
-        return float(monte_carlo_summary.get("Monte Carlo Score", 0)) >= 70
-    except Exception:
-        return False
-
-
-def is_walk_forward_green(walk_forward_report):
-    if not isinstance(walk_forward_report, str):
-        return False
-    text = walk_forward_report.upper()
-    return "GRÖN" in text or "GREEN" in text
-
-
-def verification_block_reason(robustness_report, walk_forward_report, monte_carlo_summary):
-    is_robust = isinstance(robustness_report, dict) and bool(robustness_report.get("is_robust", False))
-
-    if not is_robust:
-        return "BLOCKED: Robustness är inte godkänd."
-
-    if not is_walk_forward_green(walk_forward_report):
-        return "BLOCKED: Walk Forward är inte grön."
-
-    if not is_monte_carlo_green(monte_carlo_summary):
-        return "BLOCKED: Monte Carlo är inte grön."
-
-    return ""
-
-
-def block_paper_snapshot(reason):
-    return {
-        "status": "BLOCKED",
-        "in_position": False,
-        "signal": None,
-        "levels": {},
-        "message": reason,
-    }
-
-
 def build_human_assessment(conclusion, best, robustness_report, walk_forward_report, monte_carlo_summary, paper_snapshot):
     market = get_value(best, ["Market", "market"], "-")
     exit_model = get_value(best, ["Exit Model", "exit_model"], "-")
@@ -383,19 +333,6 @@ if st.button("OPTIMERA", type="primary", use_container_width=True):
     walk_forward_report = get_value(output, ["walk_forward_report"], "")
     monte_carlo_summary = get_value(output, ["monte_carlo_summary"], {})
     paper_snapshot = get_value(output, ["paper_trading_snapshot"], {})
-
-    # UI safety gate: never display a live/paper signal unless all verification stages are green.
-    # This prevents stale backend output from showing BUY_SIGNAL_TODAY when Monte Carlo is red.
-    paper_block_reason = verification_block_reason(
-        robustness_report=robustness_report,
-        walk_forward_report=walk_forward_report,
-        monte_carlo_summary=monte_carlo_summary,
-    )
-
-    if paper_block_reason:
-        paper_snapshot = block_paper_snapshot(paper_block_reason)
-        output["paper_trading_snapshot"] = paper_snapshot
-        output["paper_trading_report"] = paper_block_reason
 
     st.markdown("## Executive Summary")
 
